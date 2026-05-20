@@ -71,5 +71,4 @@ You can author your README using Visual Studio Code. Here are some useful editor
 
 **Enjoy!**
 =======
-# syntaxsense
->>>>>>> de53d6c24b8009a0eb9359320c7a5b844220824b
+
