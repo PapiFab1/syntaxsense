@@ -1,74 +1,174 @@
-<<<<<<< HEAD
-# syntaxsense README
+# SyntaxSense
 
-This is the README for your extension "syntaxsense". After writing up a brief description, we recommend including the following sections.
+SyntaxSense is a VS Code extension designed to help beginner and intermediate programmers understand code syntax while they write it. Instead of only giving an explanation, SyntaxSense turns selected code or the current line into a learning moment by explaining what the syntax does, saving recent explanation history, and generating quiz questions to reinforce the concept.
+
+## Why I Built This
+
+When learning a new programming language, remembering syntax can be difficult. Many tools can generate code, but they do not always help the user understand why the code works. SyntaxSense was built as an educational coding assistant that focuses on learning, retention, and active practice directly inside VS Code.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+* **Explain selected code or current line**
+  Highlight code in VS Code or place your cursor on a line, then run the Explain Syntax command to receive a beginner-friendly explanation.
 
-For example if there is an image subfolder under your extension project workspace:
+* **Automatic language detection**
+  SyntaxSense reads the current file language from VS Code so explanations can be tailored to the language being used.
 
-\!\[feature X\]\(images/feature-x.png\)
+* **Quiz Me feature**
+  After receiving an explanation, users can generate a quiz question based on the code concept to check their understanding.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+* **Interactive answer feedback**
+  Quiz choices can be clicked directly in the extension UI, giving the user a more active way to learn.
 
-## Requirements
+* **Recent syntax history**
+  SyntaxSense stores recent explanations so users can review the latest syntax concepts they asked about.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+* **Keyboard shortcut support**
+  The main Explain Syntax command can be triggered through a keybind for quick access while coding.
 
-## Extension Settings
+## Tech Stack
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+* **TypeScript**
+* **VS Code Extension API**
+* **Node.js**
+* **PostgreSQL**
+* **Drizzle ORM**
+* **HTML/CSS/JavaScript Webview UI**
+* **AI API integration**
 
-For example:
+## How It Works
 
-This extension contributes the following settings:
+1. The user selects code or places their cursor on a line in VS Code.
+2. SyntaxSense collects the code, line number, source type, and programming language.
+3. The extension sends that context to the backend or AI service.
+4. The AI returns a clear explanation of the syntax.
+5. The user can generate a quiz based on the explanation.
+6. Recent explanations are saved so the user can review previous syntax questions.
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## Installation and Local Setup
 
-## Known Issues
+### 1. Clone the repository
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+```bash
+git clone https://github.com/YOUR-USERNAME/syntaxsense.git
+cd syntaxsense
+```
 
-## Release Notes
+### 2. Install dependencies
 
-Users appreciate release notes as you update your extension.
+```bash
+npm install
+```
 
-### 1.0.0
+If your project has a separate server folder, install dependencies there too:
 
-Initial release of ...
+```bash
+cd server
+npm install
+```
 
-### 1.0.1
+### 3. Set up environment variables
 
-Fixed issue #.
+Create a `.env` file in the backend/server folder.
 
-### 1.1.0
+```env
+DATABASE_URL=your_postgresql_connection_string
+AI_API_KEY=your_ai_api_key
+```
 
-Added features X, Y, and Z.
+The exact variable names may depend on your implementation.
 
----
+### 4. Push the database schema
 
-## Following extension guidelines
+```bash
+npm run db:push
+```
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+### 5. Run the extension
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+Open the project in VS Code and press:
 
-## Working with Markdown
+```text
+F5
+```
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+This opens a new Extension Development Host window where SyntaxSense can be tested.
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+## Usage
 
-## For more information
+1. Open a code file in VS Code.
+2. Highlight a piece of code or place your cursor on a line.
+3. Run the command:
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+```text
+Explain Syntax
+```
 
-**Enjoy!**
-=======
+4. Read the generated explanation in the SyntaxSense panel.
+5. Click **Quiz Me** to generate a practice question.
+6. Select an answer to receive feedback.
 
+## Example Use Case
+
+A beginner learning JavaScript sees this line:
+
+```js
+const names = users.map(user => user.name);
+```
+
+SyntaxSense can explain that:
+
+* `const` creates a variable that cannot be reassigned.
+* `users.map(...)` loops through the `users` array and returns a new array.
+* `user => user.name` is an arrow function that extracts the `name` property from each user.
+
+Then the quiz feature can ask a question such as:
+
+```text
+What does the .map() method return?
+```
+
+This helps the user not only read the explanation, but also practice remembering the concept.
+
+## Project Structure
+
+```text
+syntaxsense/
+├── src/
+│   ├── extension.ts        # Main VS Code extension logic
+│   └── ...
+├── server/
+│   ├── db/                 # Drizzle and database setup
+│   ├── routes/             # API routes
+│   └── ...
+├── package.json
+├── README.md
+└── .gitignore
+```
+
+The actual structure may vary depending on the current version of the project.
+
+## Current Status
+
+SyntaxSense currently supports:
+
+* Explaining selected code
+* Explaining the current line when no code is selected
+* Displaying explanations in the extension UI
+* Generating quiz questions from explanations
+* Clicking quiz answers for feedback
+* Saving and showing recent explanation history
+
+## Future Improvements
+
+* Add difficulty levels for quiz questions
+* Track user progress over time
+* Show weak syntax topics based on quiz performance
+* Add support for flashcards
+* Add syntax learning paths by language
+* Improve explanation formatting with examples and common mistakes
+* Add authentication so users can save learning history across devices
+
+## What I Learned
+
+While building SyntaxSense, I worked with the VS Code Extension API, command registration, editor selection handling, webview communication, backend API integration, PostgreSQL database storage, and AI-generated educational content. I also focused on turning a simple AI explanation tool into a more interactive learning experience through quizzes and history tracking.
