@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import { db } from "./src/db/index.js";
-import { explanations } from "./src/db/schema.js";
+import { explanations, quizzes } from "./src/db/schema.js";
 import { desc, eq } from "drizzle-orm";
 
 dotenv.config();
@@ -58,29 +58,30 @@ ${code}
 \`\`\`
 `;
 
-const response = await ai.models.generateContent({
-  model: "gemini-3.5-flash",
-  contents: prompt,
-});
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+    });
 
-const explanationText = response.text || "Gemini did not return an explanation.";
+    const explanationText =
+      response.text || "Gemini did not return an explanation.";
 
-const [savedExplanation] = await db
-  .insert(explanations)
-  .values({
-    userId: "demo-user",
-    language,
-    source,
-    lineNumber,
-    code,
-    explanation: explanationText,
-  })
-  .returning();
+    const [savedExplanation] = await db
+      .insert(explanations)
+      .values({
+        userId: "demo-user",
+        language,
+        source,
+        lineNumber,
+        code,
+        explanation: explanationText,
+      })
+      .returning();
 
-res.json({
-  explanation: explanationText,
-  explanationId: savedExplanation.id,
-});
+    res.json({
+      explanation: explanationText,
+      explanationId: savedExplanation.id,
+    });
   } catch (error) {
     console.error("Gemini API error:", error);
 
@@ -101,7 +102,7 @@ app.get("/api/history", async (req, res) => {
       .from(explanations)
       .where(eq(explanations.userId, String(userId)))
       .orderBy(desc(explanations.createdAt))
-      .limit(20);
+      .limit(2);
 
     res.json({ history });
   } catch (error) {
@@ -109,6 +110,92 @@ app.get("/api/history", async (req, res) => {
 
     res.status(500).json({
       error: "Could not load explanation history.",
+    });
+  }
+});
+
+app.post("/api/explanations/:id/quiz", async (req, res) => {
+  try {
+    const explanationId = Number(req.params.id);
+
+    if (!explanationId) {
+      return res.status(400).json({
+        error: "Invalid explanation ID.",
+      });
+    }
+
+    const [savedExplanation] = await db
+      .select()
+      .from(explanations)
+      .where(eq(explanations.id, explanationId))
+      .limit(1);
+
+    if (!savedExplanation) {
+      return res.status(404).json({
+        error: "Explanation not found.",
+      });
+    }
+
+    const prompt = `
+You are SyntaxSense, a coding tutor.
+
+Create one multiple-choice quiz question based on this saved syntax explanation.
+
+Return ONLY valid JSON in this exact format:
+{
+  "question": "string",
+  "choices": ["A. choice", "B. choice", "C. choice", "D. choice"],
+  "correctAnswer": "A. choice"
+}
+
+Rules:
+- The question should test syntax understanding, not trivia.
+- Make the wrong answers believable but clearly wrong.
+- Keep it beginner-friendly.
+
+Language: ${savedExplanation.language}
+
+Code:
+\`\`\`${savedExplanation.language}
+${savedExplanation.code}
+\`\`\`
+
+Explanation:
+${savedExplanation.explanation}
+`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+    });
+
+    const rawText = response.text || "";
+
+    const cleanedText = rawText
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const quizData = JSON.parse(cleanedText);
+
+    const [savedQuiz] = await db
+      .insert(quizzes)
+      .values({
+        explanationId: savedExplanation.id,
+        question: quizData.question,
+        choices: quizData.choices,
+        correctAnswer: quizData.correctAnswer,
+      })
+      .returning();
+
+    res.json({
+      quiz: savedQuiz,
+    });
+  } catch (error) {
+    console.error("Quiz generation error:", error);
+
+    res.status(500).json({
+      error: "Could not generate quiz.",
     });
   }
 });

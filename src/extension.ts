@@ -1,83 +1,125 @@
-
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
 //code context
 type CodeContext = {
-	code: string;
-	lineNumber: number;
-	source: "current line" | "selection";
-	language: string;
-	range: vscode.Range;
+  code: string;
+  lineNumber: number;
+  source: "current line" | "selection";
+  language: string;
+  range: vscode.Range;
 };
 
 //history for explanations
 type ExplanationHistoryItem = {
-	id: number;
-	userId: string;
-	language: string;
-	source: string;
-	lineNumber: number;
-	code: string;
-	explanation: string;
-	createdAt: string;
+  id: number;
+  userId: string;
+  language: string;
+  source: string;
+  lineNumber: number;
+  code: string;
+  explanation: string;
+  createdAt: string;
+};
+
+type ExplainResponse = {
+  explanation: string;
+  explanationId: number;
+};
+
+type QuizItem = {
+  id: number;
+  explanationId: number;
+  question: string;
+  choices: string[];
+  correctAnswer: string;
+  userAnswer?: string | null;
+  isCorrect?: boolean | null;
+  createdAt: string;
 };
 
 //sideabar view
 //TO DO: Add views for history and quizzes
 class SyntaxSenseViewProvider implements vscode.WebviewViewProvider {
-	private view?: vscode.WebviewView;
+  private view?: vscode.WebviewView;
 
-	resolveWebviewView(webviewView: vscode.WebviewView) {
-		this.view = webviewView;
+  resolveWebviewView(webviewView: vscode.WebviewView) {
+    this.view = webviewView;
 
-		webviewView.webview.options = {
-			enableScripts: true,
-		};
+    webviewView.webview.options = {
+      enableScripts: true,
+    };
 
-		webviewView.webview.html = this.getHtml();
-	}
+    webviewView.webview.html = this.getHtml();
 
-	showLoading(codeContext: CodeContext) {
-		if (!this.view) {
-			return;
-		}
+    webviewView.webview.onDidReceiveMessage(async (message) => {
+      if (message.type === "quizMe") {
+        try {
+          const quiz = await generateQuizWithBackend(message.explanationId);
+          this.showQuiz(quiz);
+        } catch (error) {
+          console.error(error);
+          vscode.window.showErrorMessage(
+            "SyntaxSense could not generate a quiz. Make sure the backend is running.",
+          );
+        }
+      }
+    });
+  }
 
-		this.view.webview.postMessage({
-			type: "loading",
-			codeContext,
-		});
-	}
+  showLoading(codeContext: CodeContext) {
+    if (!this.view) {
+      return;
+    }
 
-	showExplanation(
-	codeContext: CodeContext,
-	explanation: string,
-	history: ExplanationHistoryItem[] = []
-) {
-	if (!this.view) {
-		return;
-	}
+    this.view.webview.postMessage({
+      type: "loading",
+      codeContext,
+    });
+  }
 
-	this.view.webview.postMessage({
-		type: "explanation",
-		codeContext,
-		explanation,
-		history,
-	});
-}
+  showExplanation(
+    codeContext: CodeContext,
+    explanation: string,
+    explanationId: number,
+    history: ExplanationHistoryItem[] = [],
+  ) {
+    if (!this.view) {
+      return;
+    }
 
-	showHistory(history: ExplanationHistoryItem[]) {
-	if (!this.view) {
-		return;
-	}
+    this.view.webview.postMessage({
+      type: "explanation",
+      codeContext,
+      explanation,
+      explanationId,
+      history,
+    });
+  }
 
-	this.view.webview.postMessage({
-		type: "history",
-		history,
-	});
-}
+  showHistory(history: ExplanationHistoryItem[]) {
+    if (!this.view) {
+      return;
+    }
 
-	private getHtml(): string {
-		return `
+    this.view.webview.postMessage({
+      type: "history",
+      history,
+    });
+  }
+
+  showQuiz(quiz: QuizItem) {
+    if (!this.view) {
+      return;
+    }
+
+    this.view.webview.postMessage({
+      type: "quiz",
+      quiz,
+    });
+  }
+
+  private getHtml(): string {
+    return `
 			<!DOCTYPE html>
 			<html lang="en">
 			<head>
@@ -134,6 +176,8 @@ class SyntaxSenseViewProvider implements vscode.WebviewViewProvider {
 
 				<script>
 	const content = document.getElementById("content");
+	const vscode = acquireVsCodeApi();
+	let currentQuiz = null;
 
 	window.addEventListener("message", event => {
 		const message = event.data;
@@ -147,7 +191,6 @@ class SyntaxSenseViewProvider implements vscode.WebviewViewProvider {
 					'<div class="label">Analyzing</div>' +
 					'<p>Getting syntax explanation...</p>' +
 				'</div>' +
-
 				'<div class="card">' +
 					'<div class="label">Code</div>' +
 					'<pre>' + escapeHtml(ctx.code) + '</pre>' +
@@ -181,6 +224,12 @@ class SyntaxSenseViewProvider implements vscode.WebviewViewProvider {
 					'<div>' + formatExplanation(message.explanation) + '</div>' +
 				'</div>' +
 
+				'<div class="card">' +
+					'<button id="quizMeButton" data-explanation-id="' + message.explanationId + '">' +
+						'Quiz Me' +
+					'</button>' +
+				'</div>' +
+
 				renderHistoryCards(history);
 		}
 
@@ -188,7 +237,70 @@ class SyntaxSenseViewProvider implements vscode.WebviewViewProvider {
 			content.className = "";
 			content.innerHTML = renderHistoryCards(message.history);
 		}
+
+		if (message.type === "quiz") {
+	const quiz = message.quiz;
+	currentQuiz = quiz;
+
+	content.className = "";
+
+	content.innerHTML =
+		'<div class="card">' +
+			'<div class="label">Quiz</div>' +
+			'<h3>' + escapeHtml(quiz.question) + '</h3>' +
+		'</div>' +
+
+		quiz.choices.map(function(choice, index) {
+			return (
+				'<div class="card">' +
+					'<button class="choiceButton" data-choice-index="' + index + '">' +
+						escapeHtml(choice) +
+					'</button>' +
+				'</div>'
+			);
+		}).join("") +
+
+		'<div id="quizFeedback"></div>';
+}
 	});
+
+	document.addEventListener("click", function(event) {
+	const target = event.target;
+
+	if (target && target.id === "quizMeButton") {
+		vscode.postMessage({
+			type: "quizMe",
+			explanationId: Number(target.dataset.explanationId)
+		});
+	}
+
+	if (target && target.classList && target.classList.contains("choiceButton")) {
+		if (!currentQuiz) {
+			return;
+		}
+
+		const choiceIndex = Number(target.dataset.choiceIndex);
+		const selectedChoice = currentQuiz.choices[choiceIndex];
+		const isCorrect = selectedChoice === currentQuiz.correctAnswer;
+
+		const feedback = document.getElementById("quizFeedback");
+
+		if (feedback) {
+			feedback.innerHTML =
+				'<div class="card">' +
+					'<div class="label">Result</div>' +
+					'<p><b>' + (isCorrect ? "Correct!" : "Not quite.") + '</b></p>' +
+					'<p>Your answer: ' + escapeHtml(selectedChoice) + '</p>' +
+					'<p>Correct answer: ' + escapeHtml(currentQuiz.correctAnswer) + '</p>' +
+				'</div>';
+		}
+
+		const buttons = document.querySelectorAll(".choiceButton");
+		buttons.forEach(function(button) {
+			button.disabled = true;
+		});
+	}
+});
 
 	function renderHistoryCards(history) {
 		if (!history || history.length === 0) {
@@ -236,115 +348,112 @@ class SyntaxSenseViewProvider implements vscode.WebviewViewProvider {
 									</body>
 									</html>
 		`;
-	}
+  }
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  console.log('Congratulations, your extension "syntaxsense" is now active!');
 
-	console.log('Congratulations, your extension "syntaxsense" is now active!');
+  const syntaxSenseViewProvider = new SyntaxSenseViewProvider();
 
-	const syntaxSenseViewProvider = new SyntaxSenseViewProvider();
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      "syntaxsense.sidebar",
+      syntaxSenseViewProvider,
+    ),
+  );
 
-	context.subscriptions.push(
-	vscode.window.registerWebviewViewProvider(
-		"syntaxsense.sidebar",
-		syntaxSenseViewProvider
-	)
-);
+  const disposable = vscode.commands.registerCommand(
+    "syntaxsense.explainSyntax",
+    async () => {
+      const editor = vscode.window.activeTextEditor;
 
-	const disposable = vscode.commands.registerCommand('syntaxsense.explainSyntax', async () => {
+      //if not in editor show error message
+      if (!editor) {
+        vscode.window.showWarningMessage("Open a file first");
+        return;
+      }
 
-		const editor = vscode.window.activeTextEditor; 
+      //.document allows me to read the document and .selection allows for text selection
+      const document = editor.document;
+      const selection = editor.selection;
 
-		//if not in editor show error message
-		if (!editor) {
-			vscode.window.showWarningMessage("Open a file first");
-			return;
-		}
+      //grabs selected code
+      let selectedCode = document.getText(selection);
+      const currentLine = document.lineAt(selection.active);
 
-		//.document allows me to read the document and .selection allows for text selection
-		const document = editor.document;
-		const selection = editor.selection;
+      let codeContext: CodeContext;
 
-		//grabs selected code
-		let selectedCode = document.getText(selection);
-		const currentLine = document.lineAt(selection.active);
+      //returns object for code context for if code isnt selected
+      if (!selectedCode.trim()) {
+        codeContext = {
+          code: currentLine.text,
+          lineNumber: currentLine.lineNumber + 1,
+          source: "current line",
+          language: document.languageId,
+          range: currentLine.range,
+        };
+      } else {
+        //returns object for code context if code is selected by user
+        codeContext = {
+          code: selectedCode,
+          lineNumber: selection.start.line + 1,
+          source: "selection",
+          language: document.languageId,
+          range: selection,
+        };
+      }
 
-		let codeContext: CodeContext;
+      try {
+        await vscode.commands.executeCommand("syntaxsense.sidebar.focus");
 
-		//returns object for code context for if code isnt selected
-		if(!selectedCode.trim()) {
-			codeContext = {
-				
-				code: currentLine.text,
-				lineNumber: currentLine.lineNumber + 1,
-				source: "current line",
-				language: document.languageId,
-				range: currentLine.range,
+        syntaxSenseViewProvider.showLoading(codeContext);
 
-			};
-		} else {
-			//returns object for code context if code is selected by user
-			codeContext = {
-				code: selectedCode,
-				lineNumber: selection.start.line + 1,
-				source: "selection",
-				language: document.languageId,
-				range: selection,
+        const result = await explainSyntaxWithBackend(codeContext);
 
-			};
-		}
+        const history = await getExplanationHistory();
 
-		try {
+        syntaxSenseViewProvider.showExplanation(
+          codeContext,
+          result.explanation,
+          result.explanationId,
+          history,
+        );
+      } catch (error) {
+        console.error(error);
+        vscode.window.showErrorMessage(
+          "SyntaxSense could not get an explanation. Make sure the backend is running.",
+        );
+      }
+    },
+  );
 
-		await vscode.commands.executeCommand("syntaxsense.sidebar.focus");
+  context.subscriptions.push(disposable);
 
-		syntaxSenseViewProvider.showLoading(codeContext);
+  const historyDisposable = vscode.commands.registerCommand(
+    "syntaxsense.showHistory",
+    async () => {
+      try {
+        await vscode.commands.executeCommand("syntaxsense.sidebar.focus");
 
-		const explanation = await explainSyntaxWithBackend(codeContext);
+        const history = await getExplanationHistory();
 
-		const history = await getExplanationHistory();
+        syntaxSenseViewProvider.showHistory(history);
+      } catch (error) {
+        console.error(error);
+        vscode.window.showErrorMessage(
+          "SyntaxSense could not load history. Make sure the backend is running.",
+        );
+      }
+    },
+  );
 
-		syntaxSenseViewProvider.showExplanation(codeContext, explanation, history);
-		} catch (error) {
-			console.error(error);
-			vscode.window.showErrorMessage("SyntaxSense could not get an explanation. Make sure the backend is running.");
-		}
-
-		
-
-		
-
-	});
-
-
-	context.subscriptions.push(disposable);
-
-	const historyDisposable = vscode.commands.registerCommand(
-	"syntaxsense.showHistory",
-	async () => {
-		try {
-			await vscode.commands.executeCommand("syntaxsense.sidebar.focus");
-
-			const history = await getExplanationHistory();
-
-			syntaxSenseViewProvider.showHistory(history);
-		} catch (error) {
-			console.error(error);
-			vscode.window.showErrorMessage(
-				"SyntaxSense could not load history. Make sure the backend is running."
-			);
-		}
-	}
-);
-
-context.subscriptions.push(historyDisposable);
+  context.subscriptions.push(historyDisposable);
 }
 
 //testing first function
 function explainSyntax(context: CodeContext): string {
-
-	return `This is ${context.language} code from line ${context.lineNumber}.
+  return `This is ${context.language} code from line ${context.lineNumber}.
 	
 	Source: ${context.source}
 
@@ -355,43 +464,82 @@ function explainSyntax(context: CodeContext): string {
 	This code uses syntax from ${context.language}. Later this function can explain keywords, variables, functions, syumbols, and structure line by line.`;
 }
 
-async function explainSyntaxWithBackend(codeContext: CodeContext): Promise<string> {
-	const response = await fetch("http://localhost:3000/api/explain", {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify(codeContext),
-	});
+async function explainSyntaxWithBackend(
+  codeContext: CodeContext,
+): Promise<ExplainResponse> {
+  const response = await fetch("http://localhost:3000/api/explain", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(codeContext),
+  });
 
-	if (!response.ok) {
-		throw new Error(`Backend request failed with status ${response.status}`);
-	}
+  if (!response.ok) {
+    throw new Error(`Backend request failed with status ${response.status}`);
+  }
 
-	const data = await response.json() as {
-		explanation?: string;
-		error?: string;
-	};
+  const data = (await response.json()) as {
+    explanation?: string;
+    explanationId?: number;
+    error?: string;
+  };
 
-	if (data.error) {
-		throw new Error(data.error);
-	}
+  if (data.error) {
+    throw new Error(data.error);
+  }
 
-	return data.explanation ?? "No explanation returned from backend.";
+  return {
+    explanation: data.explanation ?? "No explanation returned from backend.",
+    explanationId: data.explanationId ?? 0,
+  };
 }
 
 async function getExplanationHistory(): Promise<ExplanationHistoryItem[]> {
-	const response = await fetch("http://localhost:3000/api/history");
+  const response = await fetch("http://localhost:3000/api/history");
 
-	if (!response.ok) {
-		throw new Error(`History request failed with status ${response.status}`);
-	}
+  if (!response.ok) {
+    throw new Error(`History request failed with status ${response.status}`);
+  }
 
-	const data = await response.json() as {
-		history: ExplanationHistoryItem[];
-	};
+  const data = (await response.json()) as {
+    history: ExplanationHistoryItem[];
+  };
 
-	return data.history;
+  return data.history;
+}
+
+async function generateQuizWithBackend(
+  explanationId: number,
+): Promise<QuizItem> {
+  const response = await fetch(
+    `http://localhost:3000/api/explanations/${explanationId}/quiz`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Quiz request failed with status ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    quiz?: QuizItem;
+    error?: string;
+  };
+
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  if (!data.quiz) {
+    throw new Error("No quiz returned from backend.");
+  }
+
+  return data.quiz;
 }
 
 // This method is called when your extension is deactivated
