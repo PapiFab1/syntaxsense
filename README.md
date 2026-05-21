@@ -50,7 +50,7 @@ When learning a new programming language, remembering syntax can be difficult. M
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/syntaxsense.git
+git clone https://github.com/PapiFab1/syntaxsense.git
 cd syntaxsense
 ```
 
